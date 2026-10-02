@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import {
   loadStore,
   saveStore,
+  saveStoreAsync,
   findStudent,
   findStudentByInviteCode,
   generateInviteCode,
@@ -19,6 +20,7 @@ import {
   getGuideSteps,
   saveGuideSteps,
   updateSampleRosterCsvSlide,
+  hydrateStoreFromSupabase,
   DEFAULT_GUIDE_STEPS,
   DATA_DIR,
 } from './server/store.js';
@@ -46,6 +48,32 @@ const upload = multer({
 });
 
 app.use(express.json());
+
+// Cloud DB Hydration Middleware (Ensures Vercel Serverless Lambdas are always in-sync with Supabase)
+let isStoreHydrated = false;
+let storeHydrationPromise: Promise<void> | null = null;
+
+async function ensureStoreHydrated(): Promise<void> {
+  if (isStoreHydrated) return;
+  if (!storeHydrationPromise) {
+    storeHydrationPromise = (async () => {
+      try {
+        await hydrateStoreFromSupabase();
+        isStoreHydrated = true;
+      } catch (err) {
+        console.warn('Hydration error:', err);
+      } finally {
+        storeHydrationPromise = null;
+      }
+    })();
+  }
+  await storeHydrationPromise;
+}
+
+app.use('/api', async (_req: Request, _res: Response, next: NextFunction) => {
+  await ensureStoreHydrated();
+  next();
+});
 
 // Helper middleware for admin auth
 function requireAdmin(req: Request, res: Response, next: NextFunction): void {
@@ -474,7 +502,7 @@ app.post('/api/student/register', async (req: Request, res: Response) => {
   };
   (store as any).emailDispatches = (store as any).emailDispatches || [];
   (store as any).emailDispatches.push(regDispatchRecord);
-  saveStore(store);
+  await saveStoreAsync(store);
 
   const progress = getStudentProgress(email);
   res.json({
@@ -628,7 +656,7 @@ app.post('/api/student/change-password', (req: Request, res: Response) => {
 });
 
 // 2c-2. Mark Initial Track Started (Once slid, record action permanently)
-app.post('/api/student/mark-started', (req: Request, res: Response) => {
+app.post('/api/student/mark-started', async (req: Request, res: Response) => {
   const email = ((req.body.email || '') as string).trim().toLowerCase();
   if (!email) {
     res.status(400).json({ error: 'Student email is required' });
@@ -644,7 +672,7 @@ app.post('/api/student/mark-started', (req: Request, res: Response) => {
 
   student.hasStartedTrack = true;
   student.lastUpdated = new Date().toISOString();
-  saveStore(store);
+  await saveStoreAsync(store);
   updateSampleRosterCsvSlide(student.learnUserId || student.email, true);
 
   const progress = getStudentProgress(student.email);
@@ -1138,7 +1166,7 @@ app.post('/api/admin/vault', requireAdmin, (req: Request, res: Response) => {
 });
 
 // 12. Toggle student plan status manually from Admin panel (supports both aliases)
-const handleTogglePlan = (req: Request, res: Response) => {
+const handleTogglePlan = async (req: Request, res: Response) => {
   const { email, planId, completed } = req.body;
   if (!email || !planId) {
     res.status(400).json({ error: 'Email and planId are required' });
@@ -1168,7 +1196,7 @@ const handleTogglePlan = (req: Request, res: Response) => {
   }
 
   student.lastUpdated = new Date().toISOString();
-  saveStore(store);
+  await saveStoreAsync(store);
 
   const progress = getStudentProgress(student.email);
   res.json({ success: true, student: progress, progress });
@@ -1499,6 +1527,7 @@ function setupCsvWatcher() {
 // ---------------- VITE MIDDLEWARE / STATIC SERVE ---------------- //
 
 async function startServer() {
+  await hydrateStoreFromSupabase();
   setupCsvWatcher();
 
   if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {

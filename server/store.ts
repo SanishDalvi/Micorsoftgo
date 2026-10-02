@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { LearnPlan, MasterStoreData, StudentProgress, SecretRewardPayload, GuideStep } from '../src/types.js';
-import { syncStoreToSupabase, isSupabaseConfigured } from './supabase.js';
+import { syncStoreToSupabase, isSupabaseConfigured, fetchStoreFromSupabase } from './supabase.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -277,6 +277,29 @@ export function loadStore(): MasterStoreData {
   }
 }
 
+export async function hydrateStoreFromSupabase(): Promise<void> {
+  if (!isSupabaseConfigured) return;
+  try {
+    const cloudData = await fetchStoreFromSupabase();
+    if (cloudData) {
+      const store = loadStore();
+      if (cloudData.plans && cloudData.plans.length > 0) store.plans = cloudData.plans as any;
+      if (cloudData.guideSteps && cloudData.guideSteps.length > 0) store.guideSteps = cloudData.guideSteps as any;
+      if (cloudData.vault) store.vault = cloudData.vault as any;
+      if (cloudData.students) {
+        store.students = { ...store.students, ...cloudData.students };
+      }
+      try {
+        ensureDataDir();
+        fs.writeFileSync(STORE_FILE, JSON.stringify(store, null, 2), 'utf-8');
+      } catch {}
+      console.log(`[Supabase Sync] Hydrated store from cloud (${Object.keys(store.students).length} students, ${store.plans.length} plans)`);
+    }
+  } catch (err) {
+    console.warn('[Supabase Sync] Could not hydrate from cloud:', err);
+  }
+}
+
 export function saveStore(data: MasterStoreData): void {
   try {
     ensureDataDir();
@@ -289,6 +312,23 @@ export function saveStore(data: MasterStoreData): void {
     syncStoreToSupabase(data).catch((err) => {
       console.warn('Background Supabase sync error:', err);
     });
+  }
+}
+
+export async function saveStoreAsync(data: MasterStoreData): Promise<void> {
+  try {
+    ensureDataDir();
+    fs.writeFileSync(STORE_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('Filesystem write not supported in current environment (ephemeral/serverless). Data retained in memory / synced to cloud:', err);
+  }
+
+  if (isSupabaseConfigured) {
+    try {
+      await syncStoreToSupabase(data);
+    } catch (err) {
+      console.warn('Supabase sync error:', err);
+    }
   }
 }
 
