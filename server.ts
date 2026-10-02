@@ -24,6 +24,10 @@ import {
   DEFAULT_GUIDE_STEPS,
   DATA_DIR,
 } from './server/store.js';
+import {
+  deleteStudentFromSupabase,
+  syncVaultToSupabase,
+} from './server/supabase.js';
 import type { LearnPlan } from './src/types.js';
 import {
   sendPasswordResetEmail,
@@ -880,7 +884,7 @@ app.get(['/api/guide', '/api/guide-steps'], (_req: Request, res: Response) => {
 });
 
 // 2h. Admin Save Guide Steps (Protected, admin only)
-app.post(['/api/admin/guide', '/api/admin/guide-steps'], requireAdmin, (req: Request, res: Response) => {
+app.post(['/api/admin/guide', '/api/admin/guide-steps'], requireAdmin, async (req: Request, res: Response) => {
   const { guideSteps } = req.body;
   if (!guideSteps || !Array.isArray(guideSteps)) {
     res.status(400).json({ error: 'guideSteps array is required' });
@@ -888,6 +892,10 @@ app.post(['/api/admin/guide', '/api/admin/guide-steps'], requireAdmin, (req: Req
   }
 
   saveGuideSteps(guideSteps);
+  const store = loadStore();
+  store.guideSteps = guideSteps;
+  await saveStoreAsync(store);
+
   res.json({
     success: true,
     message: 'Guide steps and images saved successfully!',
@@ -940,7 +948,8 @@ app.post('/api/admin/login', (req: Request, res: Response) => {
 });
 
 // 6. Admin Overview & Roster
-app.get('/api/admin/overview', requireAdmin, (_req: Request, res: Response) => {
+app.get('/api/admin/overview', requireAdmin, async (_req: Request, res: Response) => {
+  await hydrateStoreFromSupabase();
   const store = loadStore();
   const studentsList = Object.values(store.students).map((s) => {
     const validPlanIds = s.completedPlanIds.filter((pid) => store.plans.some((p) => p.id === pid));
@@ -978,7 +987,7 @@ app.get('/api/admin/overview', requireAdmin, (_req: Request, res: Response) => {
 });
 
 // 7. Admin Plan Management
-app.post('/api/admin/plans', requireAdmin, (req: Request, res: Response) => {
+app.post('/api/admin/plans', requireAdmin, async (req: Request, res: Response) => {
   const { plan }: { plan: LearnPlan } = req.body;
   if (!plan || !plan.title || !plan.msLearnLink) {
     res.status(400).json({ error: 'Title and Microsoft Learn link are required' });
@@ -992,20 +1001,20 @@ app.post('/api/admin/plans', requireAdmin, (req: Request, res: Response) => {
   } else {
     store.plans.push(plan);
   }
-  saveStore(store);
+  await saveStoreAsync(store);
   res.json({ success: true, plans: store.plans });
 });
 
-app.delete('/api/admin/plans/:id', requireAdmin, (req: Request, res: Response) => {
+app.delete('/api/admin/plans/:id', requireAdmin, async (req: Request, res: Response) => {
   const planId = req.params.id;
   const store = loadStore();
   store.plans = store.plans.filter((p) => p.id !== planId);
-  saveStore(store);
+  await saveStoreAsync(store);
   res.json({ success: true, plans: store.plans });
 });
 
 // 8. Admin In-Memory CSV Upload & Multi-Plan Stream Consolidation
-app.post('/api/admin/upload-csv', requireAdmin, upload.single('file'), (req: Request, res: Response) => {
+app.post('/api/admin/upload-csv', requireAdmin, upload.single('file'), async (req: Request, res: Response) => {
   const planId = (req.body.planId as string) || 'auto';
   if (!req.file) {
     res.status(400).json({ error: 'No CSV file provided' });
@@ -1082,7 +1091,7 @@ app.post('/api/admin/upload-csv', requireAdmin, upload.single('file'), (req: Req
 
     store.lastRosterSync = new Date().toISOString();
 
-    saveStore(store);
+    await saveStoreAsync(store);
 
     const totalStudents = Object.values(store.students);
     const unlockedStudentsCount = totalStudents.filter((s) => {
@@ -1150,7 +1159,7 @@ john.doe@university.edu,pass123,John Doe,College Name,1,1,1,1
 });
 
 // 11. Admin Vault Config Update
-app.post('/api/admin/vault', requireAdmin, (req: Request, res: Response) => {
+app.post('/api/admin/vault', requireAdmin, async (req: Request, res: Response) => {
   const { vault } = req.body;
   if (!vault) {
     res.status(400).json({ error: 'Vault configuration required' });
@@ -1161,7 +1170,7 @@ app.post('/api/admin/vault', requireAdmin, (req: Request, res: Response) => {
     ...store.vault,
     ...vault,
   };
-  saveStore(store);
+  await saveStoreAsync(store);
   res.json({ success: true, vault: store.vault });
 });
 
@@ -1206,7 +1215,7 @@ app.post('/api/admin/toggle-plan', requireAdmin, handleTogglePlan);
 app.post('/api/admin/student/toggle-plan', requireAdmin, handleTogglePlan);
 
 // 12b. Toggle ALL plans for a student (Quick 100% Unlock or Reset)
-app.post('/api/admin/student/toggle-all-plans', requireAdmin, (req: Request, res: Response) => {
+app.post('/api/admin/student/toggle-all-plans', requireAdmin, async (req: Request, res: Response) => {
   const { email, unlockAll } = req.body;
   if (!email) {
     res.status(400).json({ error: 'Email is required' });
@@ -1231,13 +1240,13 @@ app.post('/api/admin/student/toggle-all-plans', requireAdmin, (req: Request, res
   }
 
   student.lastUpdated = new Date().toISOString();
-  saveStore(store);
+  await saveStoreAsync(store);
 
   res.json({ success: true, progress: getStudentProgress(student.email) });
 });
 
 // 12c. Update student record directly from Admin Panel (No CSV required)
-app.post('/api/admin/student/update', requireAdmin, (req: Request, res: Response) => {
+app.post('/api/admin/student/update', requireAdmin, async (req: Request, res: Response) => {
   const { email, fullName, learnUserId, college, password, referralsCount, completedPlanIds } = req.body;
   if (!email) {
     res.status(400).json({ error: 'Email is required' });
@@ -1275,7 +1284,7 @@ app.post('/api/admin/student/update', requireAdmin, (req: Request, res: Response
   }
 
   student.lastUpdated = new Date().toISOString();
-  saveStore(store);
+  await saveStoreAsync(store);
 
   res.json({
     success: true,
@@ -1331,7 +1340,7 @@ app.post('/api/admin/student/create', requireAdmin, async (req: Request, res: Re
   };
 
   store.students[normalizedEmail] = newStudent;
-  saveStore(store);
+  await saveStoreAsync(store);
 
   res.json({
     success: true,
@@ -1341,7 +1350,7 @@ app.post('/api/admin/student/create', requireAdmin, async (req: Request, res: Re
 });
 
 // 12e. Delete student directly from Admin Panel
-app.delete('/api/admin/student/:email', requireAdmin, (req: Request, res: Response) => {
+app.delete('/api/admin/student/:email', requireAdmin, async (req: Request, res: Response) => {
   const email = (req.params.email || '').trim().toLowerCase();
   const store = loadStore();
 
@@ -1360,14 +1369,16 @@ app.delete('/api/admin/student/:email', requireAdmin, (req: Request, res: Respon
     return;
   }
 
+  const studentEmail = store.students[targetKey].email || targetKey;
   delete store.students[targetKey];
-  saveStore(store);
+  await deleteStudentFromSupabase(studentEmail);
+  await saveStoreAsync(store);
 
   res.json({ success: true, message: `Student account "${email}" removed from database.` });
 });
 
 // 12f. Admin: Set Slide to Start Enforcement Policy ('first_login' | 'every_login' | 'disabled')
-app.post('/api/admin/slide-start-mode', requireAdmin, (req: Request, res: Response) => {
+app.post('/api/admin/slide-start-mode', requireAdmin, async (req: Request, res: Response) => {
   const mode = req.body.mode;
   if (!mode || !['first_login', 'every_login', 'disabled'].includes(mode)) {
     res.status(400).json({ error: 'Valid mode required: "first_login", "every_login", or "disabled"' });
@@ -1376,7 +1387,7 @@ app.post('/api/admin/slide-start-mode', requireAdmin, (req: Request, res: Respon
 
   const store = loadStore();
   store.slideStartMode = mode;
-  saveStore(store);
+  await saveStoreAsync(store);
 
   res.json({
     success: true,
@@ -1392,7 +1403,7 @@ app.post('/api/admin/slide-start-mode', requireAdmin, (req: Request, res: Respon
 });
 
 // 12g. Admin: Reset Slide to Start for ALL students in the database
-app.post('/api/admin/reset-all-slide-start', requireAdmin, (_req: Request, res: Response) => {
+app.post('/api/admin/reset-all-slide-start', requireAdmin, async (_req: Request, res: Response) => {
   const store = loadStore();
   let count = 0;
   Object.values(store.students).forEach((s) => {
@@ -1401,7 +1412,7 @@ app.post('/api/admin/reset-all-slide-start', requireAdmin, (_req: Request, res: 
     count++;
     updateSampleRosterCsvSlide(s.learnUserId || s.email, false);
   });
-  saveStore(store);
+  await saveStoreAsync(store);
 
   res.json({
     success: true,
@@ -1411,7 +1422,7 @@ app.post('/api/admin/reset-all-slide-start', requireAdmin, (_req: Request, res: 
 });
 
 // 12h. Admin: Toggle Slide to Start for a specific student
-app.post('/api/admin/student/toggle-slide-start', requireAdmin, (req: Request, res: Response) => {
+app.post('/api/admin/student/toggle-slide-start', requireAdmin, async (req: Request, res: Response) => {
   const { email, hasStartedTrack } = req.body;
   if (!email) {
     res.status(400).json({ error: 'Student email or ID is required' });
@@ -1428,7 +1439,7 @@ app.post('/api/admin/student/toggle-slide-start', requireAdmin, (req: Request, r
   const newStatus = typeof hasStartedTrack === 'boolean' ? hasStartedTrack : !student.hasStartedTrack;
   student.hasStartedTrack = newStatus;
   student.lastUpdated = new Date().toISOString();
-  saveStore(store);
+  await saveStoreAsync(store);
   updateSampleRosterCsvSlide(student.learnUserId || student.email, newStatus);
 
   res.json({
@@ -1442,7 +1453,7 @@ app.post('/api/admin/student/toggle-slide-start', requireAdmin, (req: Request, r
 });
 
 // 12i. Admin: Reset or Re-register Test Account (e.g. SanishDalvi-1627)
-app.post('/api/admin/reset-student-account', requireAdmin, (req: Request, res: Response) => {
+app.post('/api/admin/reset-student-account', requireAdmin, async (req: Request, res: Response) => {
   const identifier = ((req.body.identifier || 'SanishDalvi-1627') as string).trim();
   const store = loadStore();
   let student = findStudent(identifier, store);
@@ -1474,7 +1485,7 @@ app.post('/api/admin/reset-student-account', requireAdmin, (req: Request, res: R
     student.lastUpdated = new Date().toISOString();
   }
 
-  saveStore(store);
+  await saveStoreAsync(store);
   updateSampleRosterCsvSlide(student.learnUserId || student.email, false);
 
   res.json({

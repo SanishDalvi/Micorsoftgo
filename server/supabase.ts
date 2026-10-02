@@ -89,7 +89,7 @@ export async function fetchStoreFromSupabase(): Promise<Partial<MasterStoreData>
       }));
     }
 
-    if (studentsRes.data && studentsRes.data.length > 0) {
+    if (studentsRes.data !== null && Array.isArray(studentsRes.data)) {
       const studentsMap: Record<string, any> = {};
       studentsRes.data.forEach((s) => {
         const emailKey = s.email.toLowerCase();

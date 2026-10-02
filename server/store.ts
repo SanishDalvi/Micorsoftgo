@@ -224,24 +224,7 @@ export function loadStore(): MasterStoreData {
 
       let needsSave = false;
 
-      // Ensure Jerry Smith exists
-      if (!parsed.students['jerry@campus.edu']) {
-        parsed.students['jerry@campus.edu'] = {
-          email: 'jerry@campus.edu',
-          fullName: 'Jerry Smith',
-          college: 'College Name',
-          completedPlanIds: ['plan-ai-agents-vibe-coding'],
-          hasStartedTrack: false,
-          lastUpdated: new Date().toISOString(),
-          learnUserId: 'jerrysmith',
-          password: 'pass123',
-          inviteCode: 'JERRY-777',
-          referralsCount: 0,
-          referredStudents: [],
-        };
-        existingCodes.add('JERRY-777');
-        needsSave = true;
-      }
+
 
       Object.values(parsed.students).forEach((s: any) => {
         if (!s.inviteCode) {
@@ -286,8 +269,8 @@ export async function hydrateStoreFromSupabase(): Promise<void> {
       if (cloudData.plans && cloudData.plans.length > 0) store.plans = cloudData.plans as any;
       if (cloudData.guideSteps && cloudData.guideSteps.length > 0) store.guideSteps = cloudData.guideSteps as any;
       if (cloudData.vault) store.vault = cloudData.vault as any;
-      if (cloudData.students) {
-        store.students = { ...store.students, ...cloudData.students };
+      if (cloudData.students !== undefined) {
+        store.students = cloudData.students;
       }
       try {
         ensureDataDir();
