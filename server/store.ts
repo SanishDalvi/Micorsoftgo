@@ -6,8 +6,12 @@ import { syncStoreToSupabase, isSupabaseConfigured, fetchStoreFromSupabase } fro
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const DATA_DIR = path.resolve(__dirname, '../data');
-const STORE_FILE = path.join(DATA_DIR, 'store.json');
+const BUNDLED_DATA_DIR = path.resolve(__dirname, '../data');
+const BUNDLED_STORE_FILE = path.join(BUNDLED_DATA_DIR, 'store.json');
+const DATA_DIR = process.env.VERCEL ? path.join('/tmp', 'mlsa-data') : BUNDLED_DATA_DIR;
+const STORE_FILE = process.env.VERCEL ? path.join(DATA_DIR, 'store.json') : BUNDLED_STORE_FILE;
+
+let inMemoryStore: MasterStoreData | null = null;
 
 const INITIAL_PLANS: LearnPlan[] = [
   {
@@ -162,8 +166,17 @@ export function generateInviteCode(nameOrEmail: string, existingCodes?: Set<stri
 }
 
 export function loadStore(): MasterStoreData {
+  if (inMemoryStore) {
+    return inMemoryStore;
+  }
+
   ensureDataDir();
-  if (!fs.existsSync(STORE_FILE)) {
+  let fileToRead = STORE_FILE;
+  if (!fs.existsSync(fileToRead) && fs.existsSync(BUNDLED_STORE_FILE)) {
+    fileToRead = BUNDLED_STORE_FILE;
+  }
+
+  if (!fs.existsSync(fileToRead)) {
     const initialData: MasterStoreData = {
       plans: INITIAL_PLANS,
       students: {
@@ -186,12 +199,13 @@ export function loadStore(): MasterStoreData {
       adminPasscode: 'zxcvbnm,./',
       guideSteps: DEFAULT_GUIDE_STEPS,
     };
+    inMemoryStore = initialData;
     saveStore(initialData);
     return initialData;
   }
 
   try {
-    const raw = fs.readFileSync(STORE_FILE, 'utf-8');
+    const raw = fs.readFileSync(fileToRead, 'utf-8');
     const parsed = JSON.parse(raw);
     if (!parsed.plans || parsed.plans.length === 0) {
       parsed.plans = INITIAL_PLANS;
@@ -224,8 +238,6 @@ export function loadStore(): MasterStoreData {
 
       let needsSave = false;
 
-
-
       Object.values(parsed.students).forEach((s: any) => {
         if (!s.inviteCode) {
           s.inviteCode = generateInviteCode(s.fullName || s.email, existingCodes);
@@ -247,16 +259,19 @@ export function loadStore(): MasterStoreData {
       }
     }
 
+    inMemoryStore = parsed;
     return parsed;
   } catch (err) {
     console.error('Failed to parse store.json, resetting to default', err);
-    return {
+    const fallback: MasterStoreData = {
       plans: INITIAL_PLANS,
       students: {},
       vault: DEFAULT_VAULT,
       adminPasscode: 'zxcvbnm,./',
       guideSteps: DEFAULT_GUIDE_STEPS,
     };
+    inMemoryStore = fallback;
+    return fallback;
   }
 }
 
@@ -265,13 +280,14 @@ export async function hydrateStoreFromSupabase(): Promise<void> {
   try {
     const cloudData = await fetchStoreFromSupabase();
     if (cloudData) {
-      const store = loadStore();
+      const store = inMemoryStore || loadStore();
       if (cloudData.plans && cloudData.plans.length > 0) store.plans = cloudData.plans as any;
       if (cloudData.guideSteps && cloudData.guideSteps.length > 0) store.guideSteps = cloudData.guideSteps as any;
       if (cloudData.vault) store.vault = cloudData.vault as any;
       if (cloudData.students !== undefined) {
         store.students = cloudData.students;
       }
+      inMemoryStore = store;
       try {
         ensureDataDir();
         fs.writeFileSync(STORE_FILE, JSON.stringify(store, null, 2), 'utf-8');
@@ -284,6 +300,7 @@ export async function hydrateStoreFromSupabase(): Promise<void> {
 }
 
 export function saveStore(data: MasterStoreData): void {
+  inMemoryStore = data;
   try {
     ensureDataDir();
     fs.writeFileSync(STORE_FILE, JSON.stringify(data, null, 2), 'utf-8');
@@ -299,6 +316,7 @@ export function saveStore(data: MasterStoreData): void {
 }
 
 export async function saveStoreAsync(data: MasterStoreData): Promise<void> {
+  inMemoryStore = data;
   try {
     ensureDataDir();
     fs.writeFileSync(STORE_FILE, JSON.stringify(data, null, 2), 'utf-8');

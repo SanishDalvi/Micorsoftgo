@@ -42,11 +42,14 @@ export const PS5FirstBootScreen: React.FC<PS5FirstBootScreenProps> = ({
     if (isLaunching) return;
     setIsLaunching(true);
 
-    // 1. Open target URL immediately in synchronous user gesture
-    try {
-      window.open(TARGET_MS_LEARN_PLAN_URL, '_blank', 'noopener,noreferrer');
-    } catch (err) {
-      console.warn('Popup blocked:', err);
+    const cleanEmail = (student.email || '').toLowerCase().trim();
+
+    // 1. Immediately persist locally to prevent any polling flicker or screen reappearance
+    if (cleanEmail) {
+      try {
+        sessionStorage.setItem(`mlsa_session_slid_${cleanEmail}`, 'true');
+        localStorage.setItem(`mlsa_started_${cleanEmail}`, 'true');
+      } catch {}
     }
 
     // 2. Celebratory Confetti Burst across the screen
@@ -59,23 +62,36 @@ export const PS5FirstBootScreen: React.FC<PS5FirstBootScreenProps> = ({
       });
     } catch {}
 
-    // 3. Persist session
-    try {
-      if (student.email) {
-        sessionStorage.setItem(`mlsa_session_slid_${student.email.toLowerCase()}`, 'true');
-      }
-    } catch {}
-
-    // 4. Record permanently on server and update student roster store in background
+    // 3. Record permanently on server and database
     fetch('/api/student/mark-started', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: student.email }),
+      keepalive: true,
     }).catch((err) => {
       console.warn('Failed to record track start on server:', err);
     });
 
-    // 5. Smoothly transition to main platform dashboard
+    // 4. Open Microsoft Learn Challenge Plan
+    let openedTab: Window | null = null;
+    try {
+      openedTab = window.open(TARGET_MS_LEARN_PLAN_URL, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      console.warn('Popup blocked:', err);
+    }
+
+    const isPopupBlocked = !openedTab || openedTab.closed || typeof openedTab.closed === 'undefined';
+
+    if (isPopupBlocked) {
+      // Browser popup blocker stopped the new tab:
+      // Navigate current window directly to the Microsoft Learn plan so the user always lands on the curriculum
+      setTimeout(() => {
+        window.location.assign(TARGET_MS_LEARN_PLAN_URL);
+      }, 700);
+      return;
+    }
+
+    // 5. If opened in a new tab, smoothly transition current platform tab to the dashboard
     setTimeout(() => {
       onComplete();
     }, 1100);
@@ -153,6 +169,22 @@ export const PS5FirstBootScreen: React.FC<PS5FirstBootScreenProps> = ({
           landingDip={0.026}
           holdMs={1200}
         />
+
+        {isLaunching && (
+          <div className="mt-4 flex flex-col items-center gap-1.5 animate-in fade-in duration-300">
+            <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+              Launching Microsoft Learn Study Plan...
+            </span>
+            <a
+              href={TARGET_MS_LEARN_PLAN_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[11px] text-[var(--muted)] hover:text-[var(--ink)] underline transition-colors cursor-pointer"
+            >
+              Click here if Microsoft Learn does not open automatically &rarr;
+            </a>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -239,7 +239,12 @@ export default function App() {
     isStarted = isSessionSlid;
   } else {
     // 'first_login'
-    isStarted = Boolean(student?.hasStartedTrack);
+    const emailClean = (student?.email || currentEmail || '').toLowerCase();
+    const isSessionSlid = typeof window !== 'undefined' && (
+      sessionStorage.getItem(`mlsa_session_slid_${emailClean}`) === 'true' ||
+      localStorage.getItem(`mlsa_started_${emailClean}`) === 'true'
+    );
+    isStarted = Boolean(student?.hasStartedTrack) || isSessionSlid;
   }
 
   if (student && !isStarted && !isGuestMode) {
@@ -257,6 +262,7 @@ export default function App() {
               if (emailClean) {
                 try {
                   sessionStorage.setItem(`mlsa_session_slid_${emailClean}`, 'true');
+                  localStorage.setItem(`mlsa_started_${emailClean}`, 'true');
                 } catch {}
               }
               setStudent((prev) => (prev ? { ...prev, hasStartedTrack: true } : null));

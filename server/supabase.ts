@@ -139,12 +139,13 @@ export async function syncStudentToSupabase(student: any): Promise<void> {
   if (!isSupabaseConfigured || !student?.email) return;
 
   try {
-    await supabaseFetch('mlsa_students', {
+    const cleanEmail = student.email.toLowerCase().trim();
+    const res = await supabaseFetch('mlsa_students?on_conflict=email', {
       method: 'POST',
       headers: { 'Prefer': 'resolution=merge-duplicates' },
       body: JSON.stringify({
-        email: student.email,
-        full_name: student.fullName,
+        email: cleanEmail,
+        full_name: student.fullName || student.name || cleanEmail.split('@')[0],
         password: student.password || 'pass123',
         learn_user_id: student.learnUserId || null,
         student_id: student.studentId || null,
@@ -160,6 +161,9 @@ export async function syncStudentToSupabase(student: any): Promise<void> {
         slide_start_mode: student.slideStartMode || 'first_login',
       }),
     });
+    if (res.error) {
+      console.warn(`[Supabase Sync] Error syncing student ${cleanEmail}:`, res.error.message);
+    }
   } catch (err) {
     console.warn('Failed to sync student to Supabase:', err);
   }

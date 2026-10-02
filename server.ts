@@ -27,6 +27,7 @@ import {
 import {
   deleteStudentFromSupabase,
   syncVaultToSupabase,
+  syncStudentToSupabase,
 } from './server/supabase.js';
 import type { LearnPlan } from './src/types.js';
 import {
@@ -676,6 +677,7 @@ app.post('/api/student/mark-started', async (req: Request, res: Response) => {
 
   student.hasStartedTrack = true;
   student.lastUpdated = new Date().toISOString();
+  await syncStudentToSupabase(student);
   await saveStoreAsync(store);
   updateSampleRosterCsvSlide(student.learnUserId || student.email, true);
 
@@ -684,7 +686,7 @@ app.post('/api/student/mark-started', async (req: Request, res: Response) => {
 });
 
 // 2c-3. Reset Initial Track Started (Allows test accounts / students to replay Slide to Start)
-app.post('/api/student/reset-started', (req: Request, res: Response) => {
+app.post('/api/student/reset-started', async (req: Request, res: Response) => {
   const identifier = ((req.body.email || req.body.identifier || req.body.learnUserId || '') as string).trim().toLowerCase();
   if (!identifier) {
     res.status(400).json({ error: 'Student email or Microsoft Learn User ID is required' });
@@ -700,7 +702,8 @@ app.post('/api/student/reset-started', (req: Request, res: Response) => {
 
   student.hasStartedTrack = false;
   student.lastUpdated = new Date().toISOString();
-  saveStore(store);
+  await syncStudentToSupabase(student);
+  await saveStoreAsync(store);
   updateSampleRosterCsvSlide(student.learnUserId || student.email, false);
 
   const progress = getStudentProgress(student.email);
@@ -1439,6 +1442,7 @@ app.post('/api/admin/student/toggle-slide-start', requireAdmin, async (req: Requ
   const newStatus = typeof hasStartedTrack === 'boolean' ? hasStartedTrack : !student.hasStartedTrack;
   student.hasStartedTrack = newStatus;
   student.lastUpdated = new Date().toISOString();
+  await syncStudentToSupabase(student);
   await saveStoreAsync(store);
   updateSampleRosterCsvSlide(student.learnUserId || student.email, newStatus);
 
