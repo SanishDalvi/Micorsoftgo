@@ -31,7 +31,8 @@ export async function supabaseFetch<T>(endpoint: string, options: RequestInit = 
   };
 
   try {
-    const res = await fetch(url, { ...options, headers });
+    const signal = options.signal || (typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal ? AbortSignal.timeout(3500) : undefined);
+    const res = await fetch(url, { ...options, headers, signal });
     if (!res.ok) {
       const errText = await res.text();
       return { data: null, error: { message: `Supabase HTTP ${res.status}: ${errText}` } };

@@ -40,7 +40,9 @@ CREATE TABLE IF NOT EXISTS public.mlsa_students (
     registered_at TIMESTAMPTZ DEFAULT NOW(),
     last_updated TIMESTAMPTZ DEFAULT NOW(),
     temp_password TEXT,
-    temp_password_expires_at BIGINT
+    temp_password_expires_at BIGINT,
+    has_started_track BOOLEAN DEFAULT FALSE,
+    slide_start_mode TEXT DEFAULT 'first_login'
 );
 
 -- Index on search fields
