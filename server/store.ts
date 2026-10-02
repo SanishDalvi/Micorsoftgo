@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { LearnPlan, MasterStoreData, StudentProgress, SecretRewardPayload, GuideStep } from '../src/types.js';
+import { syncStoreToSupabase, isSupabaseConfigured } from './supabase.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -282,6 +283,12 @@ export function saveStore(data: MasterStoreData): void {
     fs.writeFileSync(STORE_FILE, JSON.stringify(data, null, 2), 'utf-8');
   } catch (err) {
     console.warn('Filesystem write not supported in current environment (ephemeral/serverless). Data retained in memory / synced to cloud:', err);
+  }
+
+  if (isSupabaseConfigured) {
+    syncStoreToSupabase(data).catch((err) => {
+      console.warn('Background Supabase sync error:', err);
+    });
   }
 }
 

@@ -59,11 +59,10 @@ export const PS5FirstBootScreen: React.FC<PS5FirstBootScreenProps> = ({
       });
     } catch {}
 
-    // 3. Persist session and local storage
+    // 3. Persist session
     try {
       if (student.email) {
         sessionStorage.setItem(`mlsa_session_slid_${student.email.toLowerCase()}`, 'true');
-        localStorage.setItem(`mlsa_started_${student.email.toLowerCase()}`, 'true');
       }
     } catch {}
 

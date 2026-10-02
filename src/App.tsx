@@ -231,23 +231,15 @@ export default function App() {
   const slideMode = student?.slideStartMode || 'first_login';
   let isStarted = true;
 
-  const emailClean = (student?.email || currentEmail || '').toLowerCase();
-  const learnIdClean = (student?.learnUserId || '').toLowerCase();
-
-  const hasLocalStarted = typeof window !== 'undefined' && (
-    (emailClean && (sessionStorage.getItem(`mlsa_session_slid_${emailClean}`) === 'true' || localStorage.getItem(`mlsa_started_${emailClean}`) === 'true')) ||
-    (learnIdClean && (sessionStorage.getItem(`mlsa_session_slid_${learnIdClean}`) === 'true' || localStorage.getItem(`mlsa_started_${learnIdClean}`) === 'true'))
-  );
-
   if (slideMode === 'disabled') {
     isStarted = true;
   } else if (slideMode === 'every_login') {
-    const sessionKey = `mlsa_session_slid_${emailClean}`;
-    const sessionSlid = typeof window !== 'undefined' ? sessionStorage.getItem(sessionKey) === 'true' : false;
-    isStarted = sessionSlid;
+    const emailClean = (student?.email || currentEmail || '').toLowerCase();
+    const isSessionSlid = typeof window !== 'undefined' && sessionStorage.getItem(`mlsa_session_slid_${emailClean}`) === 'true';
+    isStarted = isSessionSlid;
   } else {
     // 'first_login'
-    isStarted = Boolean(student?.hasStartedTrack) || Boolean(hasLocalStarted);
+    isStarted = Boolean(student?.hasStartedTrack);
   }
 
   if (student && !isStarted && !isGuestMode) {
@@ -261,16 +253,10 @@ export default function App() {
             onToggleTheme={toggleTheme}
             onSignOut={() => handleSelectStudent('')}
             onComplete={() => {
+              const emailClean = (student?.email || currentEmail || '').toLowerCase();
               if (emailClean) {
                 try {
                   sessionStorage.setItem(`mlsa_session_slid_${emailClean}`, 'true');
-                  localStorage.setItem(`mlsa_started_${emailClean}`, 'true');
-                } catch {}
-              }
-              if (learnIdClean) {
-                try {
-                  sessionStorage.setItem(`mlsa_session_slid_${learnIdClean}`, 'true');
-                  localStorage.setItem(`mlsa_started_${learnIdClean}`, 'true');
                 } catch {}
               }
               setStudent((prev) => (prev ? { ...prev, hasStartedTrack: true } : null));
