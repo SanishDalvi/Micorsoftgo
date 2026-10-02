@@ -67,16 +67,14 @@ export const PS5FirstBootScreen: React.FC<PS5FirstBootScreenProps> = ({
       }
     } catch {}
 
-    // 4. Record permanently on server and update student roster store
-    try {
-      await fetch('/api/student/mark-started', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: student.email }),
-      });
-    } catch (err) {
+    // 4. Record permanently on server and update student roster store in background
+    fetch('/api/student/mark-started', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: student.email }),
+    }).catch((err) => {
       console.warn('Failed to record track start on server:', err);
-    }
+    });
 
     // 5. Smoothly transition to main platform dashboard
     setTimeout(() => {

@@ -138,18 +138,6 @@ export default function App() {
     };
   }, [currentEmail]);
 
-  // Proactively clear any stale/legacy test localStorage flags when student is unstarted
-  // (Must be defined at the top level before any early returns to obey React Rules of Hooks)
-  useEffect(() => {
-    if (student && !student.hasStartedTrack) {
-      if (student.email) {
-        localStorage.removeItem(`mlsa_started_${student.email.toLowerCase()}`);
-      }
-      if (student.learnUserId) {
-        localStorage.removeItem(`mlsa_started_${student.learnUserId.toLowerCase()}`);
-      }
-    }
-  }, [student?.email, student?.learnUserId, student?.hasStartedTrack]);
 
   const handleSelectStudent = (newIdentifier: string, initialStudent?: StudentProgress) => {
     setCurrentEmail(newIdentifier);
@@ -243,15 +231,23 @@ export default function App() {
   const slideMode = student?.slideStartMode || 'first_login';
   let isStarted = true;
 
+  const emailClean = (student?.email || currentEmail || '').toLowerCase();
+  const learnIdClean = (student?.learnUserId || '').toLowerCase();
+
+  const hasLocalStarted = typeof window !== 'undefined' && (
+    (emailClean && (sessionStorage.getItem(`mlsa_session_slid_${emailClean}`) === 'true' || localStorage.getItem(`mlsa_started_${emailClean}`) === 'true')) ||
+    (learnIdClean && (sessionStorage.getItem(`mlsa_session_slid_${learnIdClean}`) === 'true' || localStorage.getItem(`mlsa_started_${learnIdClean}`) === 'true'))
+  );
+
   if (slideMode === 'disabled') {
     isStarted = true;
   } else if (slideMode === 'every_login') {
-    const sessionKey = `mlsa_session_slid_${(student?.email || '').toLowerCase()}`;
+    const sessionKey = `mlsa_session_slid_${emailClean}`;
     const sessionSlid = typeof window !== 'undefined' ? sessionStorage.getItem(sessionKey) === 'true' : false;
     isStarted = sessionSlid;
   } else {
     // 'first_login'
-    isStarted = Boolean(student?.hasStartedTrack);
+    isStarted = Boolean(student?.hasStartedTrack) || Boolean(hasLocalStarted);
   }
 
   if (student && !isStarted && !isGuestMode) {
@@ -265,13 +261,19 @@ export default function App() {
             onToggleTheme={toggleTheme}
             onSignOut={() => handleSelectStudent('')}
             onComplete={() => {
-              if (student.email) {
+              if (emailClean) {
                 try {
-                  sessionStorage.setItem(`mlsa_session_slid_${student.email.toLowerCase()}`, 'true');
+                  sessionStorage.setItem(`mlsa_session_slid_${emailClean}`, 'true');
+                  localStorage.setItem(`mlsa_started_${emailClean}`, 'true');
+                } catch {}
+              }
+              if (learnIdClean) {
+                try {
+                  sessionStorage.setItem(`mlsa_session_slid_${learnIdClean}`, 'true');
+                  localStorage.setItem(`mlsa_started_${learnIdClean}`, 'true');
                 } catch {}
               }
               setStudent((prev) => (prev ? { ...prev, hasStartedTrack: true } : null));
-              if (currentEmail) fetchPlansAndStudent(currentEmail);
             }}
           />
         </Suspense>
