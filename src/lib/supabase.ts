@@ -101,26 +101,90 @@ export async function deleteTrackFromSupabase(trackId: string): Promise<boolean>
 }
 
 /**
- * Fetch student accounts from Supabase `mlsa_students` table
+ * Fetch student accounts from Supabase (`mlsa_students` or `students` table)
  */
 export async function fetchStudentsFromSupabase(): Promise<AdminStudentRecord[] | null> {
-  if (!supabase) return null
+  if (!supabase) {
+    console.warn('[Supabase] Client not initialized. Check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.')
+    return null
+  }
   try {
-    const { data, error } = await supabase.from('mlsa_students').select('*')
-    if (error || !data) return null
+    let rows: any[] = []
 
-    return data.map((row: any) => ({
-      id: row.id || `student-${Math.random().toString(36).substring(7)}`,
-      name: row.name || row.display_name || 'Anonymous Student',
-      email: row.email || '',
-      enrollmentNo: row.enrollment_no || row.enrollment || '',
-      learnId: row.learn_id || '',
-      tracksCompleted: Number(row.tracks_completed || 0),
-      referralsCount: Number(row.referral_count || row.referrals_count || 0),
-      vaultUnlocked: Boolean(row.vault_unlocked ?? false),
-      lastActive: row.last_active || (row.created_at ? new Date(row.created_at).toLocaleDateString() : 'Recent'),
-      verified: Boolean(row.is_verified ?? row.verified ?? true),
-    }))
+    // 1. Try mlsa_students
+    const res1 = await supabase.from('mlsa_students').select('*')
+    if (!res1.error && res1.data && res1.data.length > 0) {
+      rows = res1.data
+    } else {
+      // 2. Try students table fallback
+      const res2 = await supabase.from('students').select('*')
+      if (!res2.error && res2.data && res2.data.length > 0) {
+        rows = res2.data
+      }
+    }
+
+    if (!rows || rows.length === 0) {
+      console.warn('[Supabase] No student records returned from mlsa_students or students.')
+      return null
+    }
+
+    console.log('[Supabase] Successfully fetched student rows:', rows.length)
+
+    return rows.map((row: any, idx: number) => {
+      const learnId =
+        row.user_id ||
+        row.userId ||
+        row.learn_id ||
+        row.learn_user_id ||
+        row.learnUserId ||
+        row.learn_handle ||
+        row.username ||
+        row.id ||
+        `student-${idx + 1}`
+
+      const name =
+        row.name ||
+        row.display_name ||
+        row.displayName ||
+        row.full_name ||
+        row.fullName ||
+        learnId ||
+        `Student ${idx + 1}`
+
+      const email =
+        row.email ||
+        (learnId ? `${String(learnId).toLowerCase().replace(/[^a-z0-9]/g, '')}@student.edu` : `student${idx + 1}@student.edu`)
+
+      const enrollmentNo =
+        row.enrollment_no ||
+        row.enrollmentNo ||
+        row.enrollment ||
+        row.roll_no ||
+        row.rollNo ||
+        ''
+
+      const tracksCompleted = Number(row.tracks_completed ?? row.completed_tracks ?? row.modules_completed ?? 0)
+      const referralsCount = Number(row.referral_count ?? row.referrals_count ?? row.referrals ?? 0)
+      const vaultUnlocked = Boolean(row.vault_unlocked ?? row.vaultUnlocked ?? row.is_unlocked ?? false)
+      const verified = Boolean(row.is_verified ?? row.verified ?? true)
+      const lastActive =
+        row.last_active ||
+        row.lastActive ||
+        (row.created_at ? new Date(row.created_at).toLocaleDateString() : 'Active')
+
+      return {
+        id: String(row.id || `supa-${learnId || idx}`),
+        name: String(name),
+        email: String(email),
+        enrollmentNo: String(enrollmentNo),
+        learnId: String(learnId),
+        tracksCompleted,
+        referralsCount,
+        vaultUnlocked,
+        lastActive,
+        verified,
+      }
+    })
   } catch (err) {
     console.warn('[Supabase] Failed to fetch students:', err)
     return null

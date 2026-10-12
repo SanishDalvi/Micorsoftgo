@@ -21,6 +21,7 @@ import { sendNotificationEmail } from '../lib/mailer'
 import {
   isSupabaseConfigured,
   fetchTracksFromSupabase,
+  fetchStudentsFromSupabase,
   saveTrackToSupabase,
   deleteTrackFromSupabase,
   syncStudentToSupabase,
@@ -101,6 +102,7 @@ interface VaultContextType {
   adminVerifyStudent: (studentId: string) => void
   adminGrantVault: (studentId: string) => void
   adminUploadCSV: (fileName: string) => void
+  refreshFromSupabase: () => Promise<void>
 }
 
 const VaultContext = createContext<VaultContextType | undefined>(undefined)
@@ -141,6 +143,7 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   })
 
   const [adminStudents, setAdminStudents] = useState<AdminStudentRecord[]>(INITIAL_ADMIN_STUDENTS)
+  const [supabaseStudents, setSupabaseStudents] = useState<AdminStudentRecord[]>([])
   const [dispatchLogs, setDispatchLogs] = useState<DispatchLog[]>(INITIAL_DISPATCH_LOGS)
   const [activeVideo, setActiveVideo] = useState<VideoTheme>(VIDEO_THEMES[0])
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true)
@@ -161,15 +164,24 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     localStorage.setItem('mlsa_manual_vault_override', manualOverrideUnlock ? 'true' : 'false')
   }, [manualOverrideUnlock])
 
-  // Hydrate tracks from Supabase if configured
-  useEffect(() => {
+  // Hydrate tracks and students from Supabase if configured
+  const refreshFromSupabase = async () => {
     if (isSupabaseConfigured()) {
-      fetchTracksFromSupabase().then((remoteTracks) => {
-        if (remoteTracks && remoteTracks.length > 0) {
-          setTracks(remoteTracks)
-        }
-      })
+      try {
+        const [remoteTracks, remoteStudents] = await Promise.all([
+          fetchTracksFromSupabase(),
+          fetchStudentsFromSupabase(),
+        ])
+        if (remoteTracks && remoteTracks.length > 0) setTracks(remoteTracks)
+        if (remoteStudents && remoteStudents.length > 0) setSupabaseStudents(remoteStudents)
+      } catch (err) {
+        console.warn('[Supabase] Manual refresh error:', err)
+      }
     }
+  }
+
+  useEffect(() => {
+    refreshFromSupabase()
   }, [])
 
   const logout = () => {
@@ -281,9 +293,27 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       })
     }
 
+    // 3. All registered students fetched from Supabase
+    for (const supa of supabaseStudents) {
+      const alreadyInList = list.some(
+        (s) =>
+          (supa.learnId && s.learnId && s.learnId.toLowerCase() === supa.learnId.toLowerCase()) ||
+          (supa.email && s.email && s.email.toLowerCase() === supa.email.toLowerCase())
+      )
+      if (!alreadyInList) {
+        const key = (supa.learnId || supa.email || '').toLowerCase()
+        const override = adminOverrides[key] || {}
+        list.push({
+          ...supa,
+          verified: override.verified !== undefined ? override.verified : supa.verified,
+          vaultUnlocked: override.vaultUnlocked !== undefined ? override.vaultUnlocked : supa.vaultUnlocked,
+        })
+      }
+    }
+
     setAdminStudents(list)
     localStorage.setItem('mlsa_admin_overrides', JSON.stringify(adminOverrides))
-  }, [student, completedTracksCount, peers.length, isVaultUnlocked, adminOverrides])
+  }, [student, completedTracksCount, peers.length, isVaultUnlocked, adminOverrides, supabaseStudents])
 
   const toggleSound = () => {
     const next = !soundEnabled
@@ -640,6 +670,7 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         adminVerifyStudent,
         adminGrantVault,
         adminUploadCSV,
+        refreshFromSupabase,
       }}
     >
       {children}

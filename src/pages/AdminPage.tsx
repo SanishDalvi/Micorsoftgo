@@ -10,6 +10,7 @@ import {
   Trash2,
   ExternalLink,
   BookOpen,
+  RefreshCw,
 } from 'lucide-react'
 import { useVault } from '../context/VaultContext'
 
@@ -24,7 +25,10 @@ export const AdminPage: React.FC = () => {
     tracks,
     addTrack,
     removeTrack,
+    refreshFromSupabase,
   } = useVault()
+
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
   const COORDINATOR_SECURITY_KEY =
     (import.meta as any).env?.VITE_ADMIN_PASSCODE ||
@@ -516,15 +520,32 @@ export const AdminPage: React.FC = () => {
                 <p className="text-xs text-white/40">Real-time attendance & verification records</p>
               </div>
 
-              <div className="relative w-full sm:w-64">
-                <Search className="w-3.5 h-3.5 text-white/40 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search name, ID, or email..."
-                  className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-white/10 bg-white/[0.03] text-white focus:outline-none"
-                />
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button
+                  type="button"
+                  disabled={isRefreshing}
+                  onClick={async () => {
+                    setIsRefreshing(true)
+                    await refreshFromSupabase()
+                    setTimeout(() => setIsRefreshing(false), 600)
+                  }}
+                  className="px-3 py-1.5 rounded-lg border border-white/10 hover:border-white/20 bg-white/[0.03] hover:bg-white/[0.06] text-white/70 hover:text-white text-xs font-mono inline-flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                  title="Reload all student records and curriculum tracks directly from Supabase"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin text-emerald-400' : ''}`} />
+                  <span>{isRefreshing ? 'Syncing...' : 'Sync Supabase'}</span>
+                </button>
+
+                <div className="relative w-full sm:w-64">
+                  <Search className="w-3.5 h-3.5 text-white/40 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Search name, ID, or email..."
+                    className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-white/10 bg-white/[0.03] text-white focus:outline-none"
+                  />
+                </div>
               </div>
             </div>
 
