@@ -26,6 +26,9 @@ export const AdminPage: React.FC = () => {
     addTrack,
     removeTrack,
     refreshFromSupabase,
+    adminUpdateStudentModules,
+    adminUpdateStudentReferrals,
+    adminDeleteStudent,
   } = useVault()
 
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -593,8 +596,58 @@ export const AdminPage: React.FC = () => {
                         </td>
                         <td className="p-3 text-white/70">{std.enrollmentNo || '—'}</td>
                         <td className="p-3 text-white/70">@{std.learnId}</td>
-                        <td className="p-3 text-white/70">{std.tracksCompleted}/{tracks.length || 4}</td>
-                        <td className="p-3 text-white/70">{std.referralsCount}/7</td>
+                        <td className="p-3 text-white/70">
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => adminUpdateStudentModules(std.id, Math.max(0, std.tracksCompleted - 1))}
+                              className="w-5 h-5 rounded bg-white/5 hover:bg-white/15 border border-white/10 flex items-center justify-center text-white/80 hover:text-white cursor-pointer transition-colors text-xs"
+                              title="Decrease completed tracks in Supabase"
+                            >
+                              -
+                            </button>
+                            <span className="font-mono text-xs w-5 text-center text-white font-medium">
+                              {std.tracksCompleted}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => adminUpdateStudentModules(std.id, std.tracksCompleted + 1)}
+                              className="w-5 h-5 rounded bg-white/5 hover:bg-white/15 border border-white/10 flex items-center justify-center text-white/80 hover:text-white cursor-pointer transition-colors text-xs"
+                              title="Increase completed tracks in Supabase"
+                            >
+                              +
+                            </button>
+                            <span className="text-[10px] text-white/40">/{tracks.length || 4}</span>
+                          </div>
+                        </td>
+                        <td className="p-3 text-white/70">
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => adminUpdateStudentReferrals(std.id, Math.max(0, std.referralsCount - 1))}
+                              className="w-5 h-5 rounded bg-white/5 hover:bg-white/15 border border-white/10 flex items-center justify-center text-white/80 hover:text-white cursor-pointer transition-colors text-xs"
+                              title="Decrease referral count in Supabase"
+                            >
+                              -
+                            </button>
+                            <span
+                              className={`font-mono text-xs w-5 text-center font-medium ${
+                                std.referralsCount >= 7 ? 'text-emerald-400 font-bold' : 'text-white'
+                              }`}
+                            >
+                              {std.referralsCount}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => adminUpdateStudentReferrals(std.id, std.referralsCount + 1)}
+                              className="w-5 h-5 rounded bg-white/5 hover:bg-white/15 border border-white/10 flex items-center justify-center text-white/80 hover:text-white cursor-pointer transition-colors text-xs"
+                              title="Increase referral count in Supabase (7 unlocks vault)"
+                            >
+                              +
+                            </button>
+                            <span className="text-[10px] text-white/40">/7</span>
+                          </div>
+                        </td>
                         <td className="p-3">
                           {std.vaultUnlocked ? (
                             <span className="text-[10px] px-2 py-0.5 rounded border border-emerald-500/40 text-emerald-400 bg-emerald-500/10">
@@ -620,11 +673,23 @@ export const AdminPage: React.FC = () => {
                             <button
                               type="button"
                               onClick={() => adminGrantVault(std.id)}
-                              className="text-[11px] text-white/80 hover:text-white underline cursor-pointer"
+                              className="text-[11px] text-emerald-400 hover:text-emerald-300 underline cursor-pointer"
                             >
                               Grant Key
                             </button>
                           )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (window.confirm(`Are you sure you want to delete @${std.learnId || std.name} from Supabase? This action cannot be undone.`)) {
+                                adminDeleteStudent(std.id)
+                              }
+                            }}
+                            className="p-1 rounded hover:bg-rose-500/10 text-rose-400/70 hover:text-rose-300 transition-colors inline-flex items-center cursor-pointer ml-1"
+                            title={`Delete student @${std.learnId} from Supabase`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </td>
                       </tr>
                     ))

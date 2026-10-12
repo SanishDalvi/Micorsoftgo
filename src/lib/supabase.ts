@@ -215,6 +215,98 @@ export async function syncStudentToSupabase(student: StudentProfile): Promise<bo
 }
 
 /**
+ * Update student modules / referrals / status directly in Supabase
+ */
+export async function updateStudentInSupabase(
+  student: { id?: string; email?: string; learnId?: string },
+  fields: {
+    tracksCompleted?: number
+    referralsCount?: number
+    vaultUnlocked?: boolean
+    verified?: boolean
+  }
+): Promise<boolean> {
+  if (!supabase) return false
+  try {
+    const payload: any = {
+      updated_at: new Date().toISOString(),
+    }
+    if (fields.tracksCompleted !== undefined) {
+      payload.tracks_completed = fields.tracksCompleted
+      payload.completed_tracks = fields.tracksCompleted
+      payload.modules_completed = fields.tracksCompleted
+    }
+    if (fields.referralsCount !== undefined) {
+      payload.referral_count = fields.referralsCount
+      payload.referrals_count = fields.referralsCount
+      payload.referrals = fields.referralsCount
+    }
+    if (fields.vaultUnlocked !== undefined) {
+      payload.vault_unlocked = fields.vaultUnlocked
+    }
+    if (fields.verified !== undefined) {
+      payload.is_verified = fields.verified
+      payload.verified = fields.verified
+    }
+
+    let updated = false
+    if (student.email) {
+      const { error } = await supabase.from('mlsa_students').update(payload).eq('email', student.email)
+      if (!error) updated = true
+    }
+    if (!updated && student.learnId) {
+      const { error } = await supabase.from('mlsa_students').update(payload).or(`learn_id.eq.${student.learnId},user_id.eq.${student.learnId}`)
+      if (!error) updated = true
+    }
+    if (!updated && student.id && !student.id.startsWith('supa-') && !student.id.startsWith('reg-')) {
+      const { error } = await supabase.from('mlsa_students').update(payload).eq('id', student.id)
+      if (!error) updated = true
+    }
+
+    // Also attempt on students fallback table
+    if (student.email) {
+      await supabase.from('students').update(payload).eq('email', student.email)
+    } else if (student.learnId) {
+      await supabase.from('students').update(payload).or(`learn_id.eq.${student.learnId},user_id.eq.${student.learnId}`)
+    }
+
+    return true
+  } catch (err) {
+    console.warn('[Supabase] Failed to update student in Supabase:', err)
+    return false
+  }
+}
+
+/**
+ * Delete student record directly from Supabase
+ */
+export async function deleteStudentFromSupabase(student: {
+  id?: string
+  email?: string
+  learnId?: string
+}): Promise<boolean> {
+  if (!supabase) return false
+  try {
+    if (student.email) {
+      await supabase.from('mlsa_students').delete().eq('email', student.email)
+      await supabase.from('students').delete().eq('email', student.email)
+    }
+    if (student.learnId) {
+      await supabase.from('mlsa_students').delete().or(`learn_id.eq.${student.learnId},user_id.eq.${student.learnId}`)
+      await supabase.from('students').delete().or(`learn_id.eq.${student.learnId},user_id.eq.${student.learnId}`)
+    }
+    if (student.id && !student.id.startsWith('supa-') && !student.id.startsWith('reg-')) {
+      await supabase.from('mlsa_students').delete().eq('id', student.id)
+      await supabase.from('students').delete().eq('id', student.id)
+    }
+    return true
+  } catch (err) {
+    console.warn('[Supabase] Failed to delete student from Supabase:', err)
+    return false
+  }
+}
+
+/**
  * Log action or admin dispatch to Supabase `mlsa_dispatch_logs`
  */
 export async function logDispatchToSupabase(log: DispatchLog): Promise<boolean> {

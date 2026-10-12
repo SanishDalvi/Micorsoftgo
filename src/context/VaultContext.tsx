@@ -25,6 +25,8 @@ import {
   saveTrackToSupabase,
   deleteTrackFromSupabase,
   syncStudentToSupabase,
+  updateStudentInSupabase,
+  deleteStudentFromSupabase,
   logDispatchToSupabase,
 } from '../lib/supabase'
 
@@ -103,6 +105,9 @@ interface VaultContextType {
   adminGrantVault: (studentId: string) => void
   adminUploadCSV: (fileName: string) => void
   refreshFromSupabase: () => Promise<void>
+  adminUpdateStudentModules: (studentId: string, newCount: number) => Promise<void>
+  adminUpdateStudentReferrals: (studentId: string, newCount: number) => Promise<void>
+  adminDeleteStudent: (studentId: string) => Promise<void>
 }
 
 const VaultContext = createContext<VaultContextType | undefined>(undefined)
@@ -617,6 +622,75 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     )
   }
 
+  const adminUpdateStudentModules = async (studentId: string, newCount: number) => {
+    soundManager.playClick()
+    const validCount = Math.max(0, newCount)
+    const found = adminStudents.find((s) => s.id === studentId)
+    if (!found) return
+
+    setSupabaseStudents((prev) =>
+      prev.map((s) => (s.id === studentId ? { ...s, tracksCompleted: validCount } : s))
+    )
+    setAdminStudents((prev) =>
+      prev.map((s) => (s.id === studentId ? { ...s, tracksCompleted: validCount } : s))
+    )
+
+    updateStudentInSupabase(found, { tracksCompleted: validCount })
+    addDispatchLog('ROSTER_SYNC', `Updated tracks/modules to ${validCount} for @${found.learnId || found.name}.`)
+  }
+
+  const adminUpdateStudentReferrals = async (studentId: string, newCount: number) => {
+    soundManager.playClick()
+    const validCount = Math.max(0, newCount)
+    const found = adminStudents.find((s) => s.id === studentId)
+    if (!found) return
+
+    const unlocked = validCount >= 7
+
+    setSupabaseStudents((prev) =>
+      prev.map((s) =>
+        s.id === studentId
+          ? { ...s, referralsCount: validCount, vaultUnlocked: unlocked || s.vaultUnlocked }
+          : s
+      )
+    )
+    setAdminStudents((prev) =>
+      prev.map((s) =>
+        s.id === studentId
+          ? { ...s, referralsCount: validCount, vaultUnlocked: unlocked || s.vaultUnlocked }
+          : s
+      )
+    )
+
+    updateStudentInSupabase(found, { referralsCount: validCount, vaultUnlocked: unlocked })
+    addDispatchLog('ROSTER_SYNC', `Updated referrals to ${validCount}/7 for @${found.learnId || found.name}.`)
+  }
+
+  const adminDeleteStudent = async (studentId: string) => {
+    soundManager.playClick()
+    const found = adminStudents.find((s) => s.id === studentId)
+    if (!found) return
+
+    setSupabaseStudents((prev) => prev.filter((s) => s.id !== studentId))
+    setAdminStudents((prev) => prev.filter((s) => s.id !== studentId))
+
+    try {
+      const raw = localStorage.getItem('mlsa_registered_accounts')
+      if (raw) {
+        const accounts = JSON.parse(raw)
+        const filtered = accounts.filter(
+          (acc: any) =>
+            acc.learnUserId?.toLowerCase() !== found.learnId.toLowerCase() &&
+            acc.email?.toLowerCase() !== found.email.toLowerCase()
+        )
+        localStorage.setItem('mlsa_registered_accounts', JSON.stringify(filtered))
+      }
+    } catch {}
+
+    deleteStudentFromSupabase(found)
+    addDispatchLog('ROSTER_SYNC', `Deleted user account: @${found.learnId || found.name} from Supabase roster.`)
+  }
+
   const addDispatchLog = (type: DispatchLog['type'], message: string) => {
     const newLog: DispatchLog = {
       id: `log-${Date.now()}`,
@@ -671,6 +745,9 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         adminGrantVault,
         adminUploadCSV,
         refreshFromSupabase,
+        adminUpdateStudentModules,
+        adminUpdateStudentReferrals,
+        adminDeleteStudent,
       }}
     >
       {children}
