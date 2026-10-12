@@ -2,11 +2,18 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import type { CurriculumTrack, StudentProfile, AdminStudentRecord, DispatchLog } from '../types'
 
 // Supabase Project credentials
-// Can be supplied via .env / Vercel Environment Variables:
-// VITE_SUPABASE_URL
-// VITE_SUPABASE_ANON_KEY
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://muqxdpgjtkirgdijcheh.supabase.co'
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+// Automatically supports both VITE_SUPABASE_URL and SUPABASE_URL
+const supabaseUrl =
+  (import.meta as any).env?.VITE_SUPABASE_URL ||
+  (import.meta as any).env?.SUPABASE_URL ||
+  process.env.SUPABASE_URL ||
+  'https://muqxdpgjtkirgdijcheh.supabase.co'
+
+const supabaseAnonKey =
+  (import.meta as any).env?.VITE_SUPABASE_ANON_KEY ||
+  (import.meta as any).env?.SUPABASE_ANON_KEY ||
+  process.env.SUPABASE_ANON_KEY ||
+  ''
 
 export const isSupabaseConfigured = (): boolean => {
   return Boolean(supabaseUrl && supabaseAnonKey && supabaseAnonKey.trim().length > 10)

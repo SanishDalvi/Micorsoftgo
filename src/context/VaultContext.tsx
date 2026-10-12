@@ -14,8 +14,10 @@ import {
   INITIAL_ADMIN_STUDENTS,
   INITIAL_DISPATCH_LOGS,
   extractCleanLearnId,
+  VAULT_RESOURCES,
 } from '../store/vaultStore'
 import { soundManager } from '../lib/soundEffects'
+import { sendNotificationEmail } from '../lib/mailer'
 import {
   isSupabaseConfigured,
   fetchTracksFromSupabase,
@@ -539,6 +541,13 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       ...prev,
       [key]: { ...prev[key], verified: true },
     }))
+    if (found?.email) {
+      sendNotificationEmail({
+        to: found.email,
+        studentName: found.name,
+        action: 'VERIFY',
+      })
+    }
     addDispatchLog('VERIFICATION', `Coordinator verified student: @${found?.learnId || studentId}.`)
   }
 
@@ -557,6 +566,14 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       found?.email?.toLowerCase() === student.email.toLowerCase()
     ) {
       setManualOverrideUnlock(true)
+    }
+    if (found?.email) {
+      sendNotificationEmail({
+        to: found.email,
+        studentName: found.name,
+        action: 'GRANT_VAULT',
+        token: VAULT_RESOURCES.secretAccessToken,
+      })
     }
     addDispatchLog('TOKEN_DISPATCH', `Dispatched high-compute bearer token to student: @${found?.learnId || studentId}.`)
   }

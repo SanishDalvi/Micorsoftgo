@@ -14,7 +14,10 @@ export const AdminConsoleModal: React.FC = () => {
   } = useVault()
 
   const COORDINATOR_SECURITY_KEY =
-    (import.meta as any).env?.VITE_ADMIN_PASSCODE || 'mlsa-coordinator-2026'
+    (import.meta as any).env?.VITE_ADMIN_PASSCODE ||
+    (import.meta as any).env?.ADMIN_PASSCODE ||
+    process.env.ADMIN_PASSCODE ||
+    'mlsa-coordinator-2026'
 
   const [passcode, setPasscode] = useState('')
   const [isAuthenticated, setIsAuthenticated] = useState(false)

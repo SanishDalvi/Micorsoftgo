@@ -136,4 +136,9 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  define: {
+    'process.env.ADMIN_PASSCODE': JSON.stringify(process.env.ADMIN_PASSCODE || process.env.VITE_ADMIN_PASSCODE || ''),
+    'process.env.SUPABASE_URL': JSON.stringify(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''),
+    'process.env.SUPABASE_ANON_KEY': JSON.stringify(process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || ''),
+  },
 })
